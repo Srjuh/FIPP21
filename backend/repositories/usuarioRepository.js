@@ -24,6 +24,11 @@ export default class UsuarioRepository {
         return false;
     }
 
+    async obterTodos() {
+        let sql = "select usu_id, usu_nome, usu_email, usu_senha from tb_usuario";
+        return await this.#banco.ExecutaComando(sql, []);
+    }
+
     // Validação por Email e Senha
     async obterPorEmailSenha(email, senha) {
         let sql = "select * from tb_usuario where usu_email = ? and usu_senha = ?";

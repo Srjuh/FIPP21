@@ -8,6 +8,16 @@ export default class UsuarioController {
         this.#usuRepo = new UsuarioRepository();
     }
 
+    async obterTodos(req, res){
+        try {
+            let usuarios = await this.#usuRepo.obterTodos();
+            return res.status(200).json(usuarios);
+        } catch(ex) {
+            console.log(ex);
+            return res.status(500).json({msg: "Erro interno no servidor!"});
+        }
+    }
+
     async cadastrarUsuario(req, res){
         try {
             let {nome, email, senha} = req.body;
