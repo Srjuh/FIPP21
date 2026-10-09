@@ -5,7 +5,16 @@ const doc = {
         title: "API para o projeto bimestral FIPP21",
         description: "Documentação do conjunto de endpoints criados para o BlackJack"
     },
-    host: "localhost:5000"
+    host: "localhost:5000",
+    components: {
+    securitySchemes: {
+        cookieAuth: {
+            type: "apiKey",
+            in: "cookie",
+            name: "token-pfs2"
+        }
+    }
+}
 }
 
 const outputFile = "./swagger-output.json";
