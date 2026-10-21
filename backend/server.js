@@ -7,6 +7,7 @@ import {createRequire} from 'module';
 // Importação das rotas
 import loginRouter from './routes/loginRoute.js';
 import usuarioRouter from './routes/usuarioRoute.js';
+import salaRouter from './routes/salaRoute.js';
 
 const require = createRequire(import.meta.url);
 const outputJson = require("./swagger-output.json");
@@ -22,6 +23,7 @@ server.use("/docs", swaggerUi.serve, swaggerUi.setup(outputJson));
 // Rotas
 server.use("/login", loginRouter);
 server.use("/usuario", usuarioRouter);
+server.use("/sala", salaRouter);
 
 
 server.listen(5000, function() {
