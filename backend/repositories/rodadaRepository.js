@@ -1,5 +1,4 @@
 import Database from "../database/database.js";
-import RodadaEntity from "../entities/rodadaEntity.js";
 
 export default class RodadaRepository {
   #banco;
