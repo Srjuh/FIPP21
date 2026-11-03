@@ -48,6 +48,14 @@ export default class RodadaEntity {
     this.#salaId = salaId;
   }
 
+  validar() {
+    if (this.#codigoBaralho && this.#dtInicio && this.#salaId) {
+      return true;
+    }
+
+    return false;
+  }
+
   static toMap(row) {
     return new RodadaEntity(
       row["rod_id"],
