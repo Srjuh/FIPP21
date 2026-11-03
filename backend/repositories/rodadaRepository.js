@@ -39,12 +39,21 @@ export default class RodadaRepository {
     return result;
   }
 
+  // Encerra a rodada
   async encerrarRodada(rodadaId) {
     let sql =
       "update tb_rodada set rod_dtfim = current_timestamp where rod_id = ? and rod_dtfim is NULL";
     let valores = [rodadaId];
 
     let result = await this.#banco.ExecutaComandoNonQuery(sql, valores);
+
+    return result;
+  }
+
+  async obterRodadaPorId(rodadaId) {
+    let sql = "select * from tb_rodada where rod_id = ?";
+    let valores = [rodadaId];
+    let result = await this.#banco.ExecutaComando(sql, valores);
 
     return result;
   }

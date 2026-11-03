@@ -1,4 +1,3 @@
-import ParticipanteEntity from "../entities/participanteEntity.js";
 import ParticipanteRepository from "../repositories/participanteRepository.js";
 
 export default class ParticipanteController {
