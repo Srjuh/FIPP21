@@ -1,4 +1,5 @@
 // Dependências
+import blackjackRouter from './routes/blackjackRoute.js';
 import express from 'express';
 import cookieParser from 'cookie-parser';
 import swaggerUi from 'swagger-ui-express';
@@ -24,7 +25,7 @@ server.use("/docs", swaggerUi.serve, swaggerUi.setup(outputJson));
 server.use("/login", loginRouter);
 server.use("/usuario", usuarioRouter);
 server.use("/sala", salaRouter);
-
+server.use("/blackjack", blackjackRouter);
 
 server.listen(5000, function() {
     console.log("servidor web em funcionamento!");
