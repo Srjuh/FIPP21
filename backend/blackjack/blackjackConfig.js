@@ -4,7 +4,7 @@
 export const REGRAS = {
     SALDO_INICIAL: 1000,
     SALDO_MINIMO: 10,               // só joga quem tem saldo MAIOR que esse valor
-    APOSTA_MINIMA: 10,              // README não define; ajuste se a equipe decidir outro valor
+    APOSTA_MINIMA: 10,              
     LIMITE_PONTOS: 21,
     DEALER_PARA_EM: 17,             // dealer compra com 16 ou menos e para com 17 ou mais
     PAGAMENTO_NORMAL: 1,            // vitória comum paga 1:1
@@ -19,7 +19,6 @@ export const FASES = {
 };
 
 // Os valores de status que vão para tb_turno.tur_status
-// (o ENUM do banco ainda precisa de "Parou", "Empatou" e "Blackjack")
 export const STATUS = {
     AGUARDANDO: "Aguardando",   // ainda não apostou
     APOSTOU: "Apostou",

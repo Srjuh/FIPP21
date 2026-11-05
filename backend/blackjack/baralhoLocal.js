@@ -3,8 +3,7 @@ import CartaEntity from "../entities/cartaEntity.js";
 
 // Baralho local com o mesmo formato de cartas da Deck of Cards API.
 // A rodada só precisa de um objeto com o método "async comprar()" que devolve uma CartaEntity,
-// então a integração com a API (outro integrante) pode criar uma classe com esse mesmo método
-// e substituir este baralho sem mexer em nenhuma regra.
+// Integração com a API pode criar uma classe com esse mesmo método
 
 const VALORES = ["ACE", "2", "3", "4", "5", "6", "7", "8", "9", "10", "JACK", "QUEEN", "KING"];
 const NAIPES = ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"];
@@ -28,8 +27,8 @@ export default class BaralhoLocal {
         this.#cartas = BaralhoLocal.#criarEmbaralhado(quantidadeBaralhos);
     }
 
-    // Baralho com ordem definida (ex.: ["AS", "KH"]), útil para testar situações específicas.
-    // A primeira carta da lista é a primeira a ser comprada.
+    // Baralho com ordem definida (ex.: ["AS", "KH"])
+    // A primeira carta da lista é a primeira a ser comprada
     static deOrdemFixa(codigos) {
         let baralho = new BaralhoLocal(1);
         baralho.#cartas = codigos.map(codigo => BaralhoLocal.criarCarta(codigo));

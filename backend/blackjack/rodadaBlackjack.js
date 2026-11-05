@@ -3,16 +3,10 @@ import RegrasBlackjack from "./regrasBlackjack.js";
 import ErroBlackjack from "./erroBlackjack.js";
 import { FASES, STATUS, REGRAS } from "./blackjackConfig.js";
 
-// Controla UMA rodada de blackjack de uma sala (fica em memória enquanto a rodada acontece).
-//
+// Controla UMA rodada de blackjack de uma sala (fica em memória enquanto a rodada acontece)
 // Fluxo:  APOSTAS -> JOGADORES -> FINALIZADA
-//   1. APOSTAS: cada participante aposta (apostar). Quando todos apostam a distribuição começa sozinha,
-//      ou o controle externo chama iniciarDistribuicao() (ex.: tempo esgotado).
-//   2. JOGADORES: cada um, na sua ordem, pede carta ou para.
-//   3. Quando o último jogador termina, o dealer joga e os pagamentos são calculados sozinhos.
-//
-// "baralho" é qualquer objeto com "async comprar()" que devolve uma CartaEntity (BaralhoLocal ou a Deck of Cards API).
-// "participantes" é uma lista de { parId, saldo, ordem } (ordem é opcional, se faltar vale a posição na lista).
+// "baralho" é qualquer objeto com "async comprar()" que devolve uma CartaEntity (BaralhoLocal ou a Deck of Cards API)
+// "participantes" é uma lista de { parId, saldo, ordem } (ordem é opcional, se faltar vale a posição na lista)
 export default class RodadaBlackjack {
 
     #rodId;
@@ -58,10 +52,7 @@ export default class RodadaBlackjack {
         }
     }
 
-    // ---------------------------------------------------------------
     // Ações dos jogadores (todas devolvem o estado atualizado da rodada)
-    // ---------------------------------------------------------------
-
     apostar(parId, valor) {
         return this.#executar(async () => {
             if(this.#fase !== FASES.APOSTAS){
@@ -148,10 +139,7 @@ export default class RodadaBlackjack {
         });
     }
 
-    // ---------------------------------------------------------------
     // Consultas
-    // ---------------------------------------------------------------
-
     // Estado que pode ser enviado para TODOS os jogadores da sala:
     // a carta virada do dealer não revela código, imagem nem valor.
     obterEstado() {
@@ -207,10 +195,7 @@ export default class RodadaBlackjack {
         ];
     }
 
-    // ---------------------------------------------------------------
     // Internos
-    // ---------------------------------------------------------------
-
     // Executa uma ação de cada vez. Sem isso, dois cliques rápidos (ou duas mensagens do WebSocket)
     // poderiam comprar duas cartas porque a compra é assíncrona (pode ser uma chamada de API).
     #executar(acao) {
@@ -343,7 +328,7 @@ export default class RodadaBlackjack {
             jogador.lucro = RegrasBlackjack.calcularLucro(jogador.aposta, resultado);
             jogador.saldo = RegrasBlackjack.arredondar(jogador.saldo + jogador.lucro);
 
-            // Quem estourou continua com o status "Estourou" (que já significa derrota)
+            // Quem estourou continua com o status "Estourou"
             if(jogador.status !== STATUS.ESTOUROU){
                 jogador.status = resultado;
             }

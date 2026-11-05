@@ -14,7 +14,6 @@ export default class CartaEntity {
     get ordem(){return this.#ordem;}
     set ordem(value){this.#ordem = value;}
 
-    // "S" ou "N", igual ao ENUM do banco
     get visivel(){return this.#visivel;}
     set visivel(value){this.#visivel = value;}
 
