@@ -21,6 +21,13 @@ const outputFile = "./swagger-output.json";
 const routes = ["./server.js"];
 
 swaggerAutogen({openapi: '3.0.0'})(outputFile, routes, doc)
-.then(async () => {
+.then(async (resultado) => {
+    if (!resultado.success) {
+        throw new Error("Não foi possível gerar a documentação Swagger.");
+    }
     await import("./server.js");
+})
+.catch(erro => {
+    console.error(erro);
+    process.exitCode = 1;
 });

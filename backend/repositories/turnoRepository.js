@@ -25,5 +25,4 @@ export default class TurnoRepository {
     return result;
   }
 
-  // O resto da implementação depende das regras e integração. Além de ser necessário verificar se os participantes estão apostando antes de realmente encerrar o turno.
 }

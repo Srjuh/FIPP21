@@ -4,8 +4,8 @@ import SalaEntity from "../entities/salaEntity.js";
 export default class SalaRepository {
   #banco;
 
-  constructor() {
-    this.#banco = new Database();
+  constructor(banco = new Database()) {
+    this.#banco = banco;
   }
 
   // Criar novas salas
@@ -16,7 +16,7 @@ export default class SalaRepository {
     let idGerado = await this.#banco.ExecutaComandoLastInserted(sql, valores);
 
     if (idGerado) {
-      entidade.id = idGerado;
+      entidade.salaId = idGerado;
       return true;
     }
 

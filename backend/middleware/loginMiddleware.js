@@ -8,10 +8,25 @@ if (!SEGREDO) {
     throw new Error("JWT_SECRET precisa estar configurado.");
 }
 
+const usuarios = new UsuarioRepository();
+
 export default class LoginMiddleware {
 
     gerarJWT(id) {
         return jwt.sign({ id }, SEGREDO, { expiresIn: "1h" });
+    }
+
+    async autenticar(token) {
+        if (!token) return null;
+        try {
+            const payload = jwt.verify(token, SEGREDO);
+            return await usuarios.obterPorId(payload.id);
+        } catch (error) {
+            if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
+                return null;
+            }
+            throw error;
+        }
     }
 
     async validar(req, res, next) {
@@ -22,23 +37,16 @@ export default class LoginMiddleware {
         }
 
         try {
-            const payload = jwt.verify(token, SEGREDO);
-
-            const repo = new UsuarioRepository();
-            const usuario = await repo.obterPorId(payload.id);
+            const usuario = await new LoginMiddleware().autenticar(token);
 
             if (!usuario) {
-                return res.status(401).json({ msg: "Usuário não encontrado!" });
+                return res.status(401).json({ msg: "Token inválido, expirado ou usuário não encontrado!" });
             }
 
             req.usuario = usuario;
             return next();
 
         } catch (error) {
-            if (error instanceof jwt.JsonWebTokenError || error instanceof jwt.TokenExpiredError) {
-                return res.status(401).json({ msg: "Token inválido ou expirado!" });
-            }
-
             return next(error);
         }
     }

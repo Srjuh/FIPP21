@@ -1,11 +1,20 @@
 import SalaRepository from '../repositories/salaRepository.js';
 import SalaEntity from '../entities/salaEntity.js';
+import BlackjackRepository from '../repositories/blackjackRepository.js';
+import { blackjackController } from './blackjackController.js';
+import ErroBlackjack from '../blackjack/erroBlackjack.js';
+import { ErroBaralho } from '../services/baralhoService.js';
+import { notificarSala, removerDaSala } from '../websocket.js';
 
 export default class SalaController {
     #Repo;
+    #jogo;
+    #participantes;
 
-    constructor(){
-        this.#Repo = new SalaRepository();
+    constructor(repo = new SalaRepository(), jogo = blackjackController, participantes = new BlackjackRepository()){
+        this.#Repo = repo;
+        this.#jogo = jogo;
+        this.#participantes = participantes;
     }
 
     async obterTodos(req, res){
@@ -21,8 +30,13 @@ export default class SalaController {
     async criarSala(req, res){
         try {
             let usuId = req.usuario.id;
-            let { salaNome } = req.body;
+            let { salaNome } = req.body ?? {};
             let entidade;
+
+            if(typeof salaNome !== "string" || !salaNome.trim() || salaNome.length > 200){
+                return res.status(400).json({msg: "Nome da sala inválido!"});
+            }
+            salaNome = salaNome.trim();
 
             if(usuId){
                 entidade = new SalaEntity(0, salaNome, usuId);
@@ -34,7 +48,7 @@ export default class SalaController {
                 let result = await this.#Repo.criarSala(entidade);
 
                 if(result) {
-                    return res.status(201).json({msg: "Sala criada!"});
+                    return res.status(201).json({msg: "Sala criada!", salaId: entidade.salaId});
                 }
 
                 return res.status(404).json({msg: "Entidade não encontrada!"});
@@ -69,10 +83,15 @@ export default class SalaController {
     async entrarSala(req, res){
         try {
             let usuarioId = req.usuario.id;
-            let { codigoSala } = req.body;
+            let { codigoSala } = req.body ?? {};
+            codigoSala = Number(codigoSala);
 
             if(!usuarioId){
                 return res.status(401).json({msg: "Token do usuário não encontrado!"});
+            }
+
+            if(!Number.isSafeInteger(codigoSala) || codigoSala <= 0){
+                return res.status(400).json({msg: "Código da sala inválido!"});
             }
 
             let resultado = await this.#Repo.entrarSala(codigoSala, usuarioId);
@@ -91,10 +110,25 @@ export default class SalaController {
                 return res.status(409).json({msg: "O usuário já está ativo em outra sala!"});
             }
 
+            notificarSala(codigoSala, "participante_entrou", { participanteId: resultado.participanteId });
+            let estado;
+            try {
+                estado = await this.#jogo.entrarNaSala(codigoSala);
+            } catch(erro) {
+                console.error("Participante entrou, mas a rodada não pôde iniciar:", erro);
+                return res.status(erro instanceof ErroBlackjack ? erro.status : 503).json({
+                    msg: "Entrada realizada, mas não foi possível iniciar a rodada. Tente novamente em /blackjack/rodada.",
+                    salaId: codigoSala,
+                    participanteId: resultado.participanteId,
+                    codigo: erro instanceof ErroBlackjack ? erro.codigo : "INICIO_INDISPONIVEL",
+                    detalhe: erro instanceof ErroBlackjack ? erro.message : "Verifique a disponibilidade do servidor e do baralho."
+                });
+            }
             return res.status(201).json({
                 msg: "Entrada na sala realizada!",
                 salaId: codigoSala,
-                participanteId: resultado.participanteId
+                participanteId: resultado.participanteId,
+                rodada: estado
             });
         } catch(ex) {
             console.log(ex);
@@ -105,7 +139,7 @@ export default class SalaController {
     async sairSala(req, res){
         try {
             let usuarioId = req.usuario.id;
-            let { codigoSala } = req.body;
+            let { codigoSala } = req.body ?? {};
             let salaId = Number(codigoSala);
 
             if(!usuarioId){
@@ -116,14 +150,28 @@ export default class SalaController {
                 return res.status(400).json({msg: "Código da sala inválido!"});
             }
 
+            let participante = await this.#participantes.obterParticipanteUsuario(salaId, usuarioId);
+            if(!participante){
+                return res.status(404).json({msg: "Participante não está ativo na sala!"});
+            }
+            await this.#jogo.sairDaSala(salaId, participante.par_id);
             let resultado = await this.#Repo.sairSala(salaId, usuarioId);
 
             if(!resultado){
                 return res.status(404).json({msg: "Participante não está ativo na sala!"});
             }
 
+            removerDaSala(salaId, usuarioId);
+            notificarSala(salaId, "participante_saiu", { participanteId: participante.par_id });
             return res.status(200).json({msg: "Saída da sala realizada!"});
         } catch(ex) {
+            if(ex instanceof ErroBlackjack){
+                return res.status(ex.status).json({msg: ex.message, codigo: ex.codigo});
+            }
+            if(ex instanceof ErroBaralho){
+                console.error(ex);
+                return res.status(503).json({msg: "Não foi possível concluir a jogada. Tente sair novamente."});
+            }
             console.log(ex);
             return res.status(500).json({msg: "Erro interno no servidor!"});
         }

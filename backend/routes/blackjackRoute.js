@@ -1,9 +1,8 @@
 import express from 'express';
-import BlackjackController from '../controllers/blackjackController.js';
+import { blackjackController as controller } from '../controllers/blackjackController.js';
 import LoginMiddleware from '../middleware/loginMiddleware.js';
 
 const router = express.Router();
-let controller = new BlackjackController();
 let auth = new LoginMiddleware();
 
 router.post("/rodada", auth.validar, (req, res) => {
@@ -94,6 +93,20 @@ router.post("/sair-rodada", auth.validar, (req, res) => {
         }
     } */
     controller.sairDaRodada(req, res);
+})
+
+router.post("/continuar", auth.validar, (req, res) => {
+    // #swagger.tags = ['Blackjack']
+    // #swagger.description = 'Retoma uma distribuição interrompida por falha do baralho.'
+    // #swagger.security = [{ "cookieAuth": [] }]
+    controller.continuar(req, res);
+})
+
+router.post("/cancelar-interrompida", auth.validar, (req, res) => {
+    // #swagger.tags = ['Blackjack']
+    // #swagger.description = 'Cancela uma rodada sem dados após reinício do servidor.'
+    // #swagger.security = [{ "cookieAuth": [] }]
+    controller.cancelarInterrompida(req, res);
 })
 
 router.get("/estado/:salaId", auth.validar, (req, res) => {

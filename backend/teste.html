@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FIPP21 - Teste do backend</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f2f4f3; color: #17211b; margin: 0; }
+    main { max-width: 1000px; margin: auto; padding: 20px; }
+    h1 { margin-bottom: 4px; }
+    section { background: white; border: 1px solid #d5ded8; border-radius: 8px; padding: 16px; margin: 16px 0; }
+    h2, h3 { margin-top: 0; }
+    .linha { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; margin: 10px 0; }
+    label { display: grid; gap: 4px; }
+    input { padding: 8px; border: 1px solid #9aaba0; border-radius: 4px; }
+    button { padding: 8px 12px; border: 0; border-radius: 4px; background: #216542; color: white; cursor: pointer; }
+    button:hover { background: #164a30; }
+    button:disabled { background: #9aaba0; cursor: not-allowed; }
+    #mensagem { padding: 10px; background: #e6f4ea; border-radius: 4px; white-space: pre-wrap; }
+    #mensagem.erro { background: #ffe6e6; color: #8b1c1c; }
+    .mesa { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+    .mao { background: #f7faf8; border: 1px solid #d5ded8; border-radius: 6px; padding: 12px; }
+    .cartas { display: flex; flex-wrap: wrap; gap: 6px; min-height: 100px; }
+    .cartas img, .carta-oculta { width: 70px; height: 98px; border-radius: 5px; }
+    .cartas img { object-fit: contain; }
+    .carta-oculta { display: grid; place-items: center; background: #254c86; color: white; font-size: 13px; }
+    .salas button { margin: 3px; }
+    small { color: #52665a; }
+  </style>
+</head>
+<body>
+<main>
+  <h1>FIPP21 - Teste do backend</h1>
+  <p>Cadastre-se ou entre, crie ou escolha uma sala e teste as jogadas.</p>
+  <p id="mensagem" role="status" aria-live="polite">Aguardando uma ação.</p>
+
+  <section>
+    <h2>1. Conta</h2>
+    <p id="usuario">Não autenticado.</p>
+    <div class="linha">
+      <label>Nome (para cadastro)<input id="nome" autocomplete="name"></label>
+      <label>Email<input id="email" type="email" autocomplete="email"></label>
+      <label>Senha<input id="senha" type="password" autocomplete="current-password"></label>
+      <button type="button" id="cadastrar">Cadastrar</button>
+      <button type="button" id="login">Entrar</button>
+    </div>
+    <small>Para testar dois jogadores, use navegadores ou perfis separados: abas do mesmo perfil compartilham o login.</small>
+  </section>
+
+  <section>
+    <h2>2. Sala</h2>
+    <div class="linha">
+      <label>Nome da nova sala<input id="nomeSala"></label>
+      <button type="button" id="criarSala">Criar sala</button>
+      <button type="button" id="listarSalas">Listar minhas salas</button>
+    </div>
+    <div id="salas" class="salas"></div>
+    <div class="linha">
+      <label>Código da sala<input id="codigoSala" type="number" min="1" step="1"></label>
+      <button type="button" id="entrarSala">Entrar na sala</button>
+      <button type="button" id="acompanhar">Acompanhar sala atual</button>
+      <button type="button" id="sairSala">Sair da sala</button>
+    </div>
+    <p id="salaAtual">Nenhuma sala selecionada.</p>
+    <p id="conexao">WebSocket: desconectado.</p>
+    <small>Se já estiver na sala, use “Acompanhar sala atual”. Quem entra durante uma rodada aguarda a próxima.</small>
+  </section>
+
+  <section>
+    <h2>3. Rodada</h2>
+    <div class="linha">
+      <button type="button" id="iniciar">Iniciar próxima rodada</button>
+      <label>Aposta<input id="valor" type="number" min="10" step="0.01" value="50"></label>
+      <button type="button" id="apostar">Apostar</button>
+      <button type="button" id="distribuir">Distribuir agora</button>
+      <button type="button" id="pedir">Pedir carta</button>
+      <button type="button" id="parar">Parar</button>
+      <button type="button" id="continuar">Retomar distribuição</button>
+      <button type="button" id="atualizar">Atualizar estado</button>
+    </div>
+    <p id="resumo">Nenhuma rodada carregada.</p>
+    <div id="mesa" class="mesa"></div>
+  </section>
+</main>
+<script>
+  const campo = id => document.getElementById(id);
+  let salaAtual = null;
+  let participanteId = null;
+  let socket = null;
+
+  function mensagem(texto, erro = false) {
+    campo("mensagem").textContent = texto;
+    campo("mensagem").classList.toggle("erro", erro);
+  }
+
+  async function requisicao(url, dados) {
+    const opcoes = { credentials: "same-origin" };
+    if (dados !== undefined) {
+      opcoes.method = "POST";
+      opcoes.headers = { "Content-Type": "application/json" };
+      opcoes.body = JSON.stringify(dados);
+    }
+    const resposta = await fetch(url, opcoes);
+    const resultado = await resposta.json();
+    if (!resposta.ok) {
+      const erro = new Error([resultado.msg || `Erro HTTP ${resposta.status}`, resultado.detalhe].filter(Boolean).join(" "));
+      erro.status = resposta.status;
+      erro.dados = resultado;
+      throw erro;
+    }
+    return resultado;
+  }
+
+  function executar(acao) {
+    return async () => {
+      try { await acao(); }
+      catch (erro) { mensagem(erro.message, true); }
+    };
+  }
+
+  function codigoInformado() {
+    const codigo = Number(campo("codigoSala").value);
+    if (!Number.isSafeInteger(codigo) || codigo <= 0) throw new Error("Informe um código de sala válido.");
+    return codigo;
+  }
+
+  function salaSelecionada() {
+    if (!salaAtual) throw new Error("Entre ou acompanhe uma sala primeiro.");
+    return salaAtual;
+  }
+
+  function fecharConexao() {
+    const anterior = socket;
+    socket = null;
+    if (anterior) anterior.close();
+    campo("conexao").textContent = "WebSocket: desconectado.";
+  }
+
+  function selecionarSala(codigo, participante) {
+    if (salaAtual !== codigo) {
+      fecharConexao();
+      participanteId = null;
+      campo("mesa").replaceChildren();
+      campo("resumo").textContent = "Nenhuma rodada carregada.";
+    }
+    salaAtual = codigo;
+    if (participante != null) participanteId = participante;
+    campo("codigoSala").value = codigo;
+    campo("salaAtual").textContent = `Sala ${codigo} | Participante ${participanteId ?? "não identificado"}`;
+  }
+
+  function conectar() {
+    fecharConexao();
+    const codigo = salaSelecionada();
+    const protocolo = location.protocol === "https:" ? "wss:" : "ws:";
+    const atual = new WebSocket(`${protocolo}//${location.host}/ws`);
+    socket = atual;
+    campo("conexao").textContent = "WebSocket: conectando...";
+    atual.onopen = () => {
+      if (socket === atual) atual.send(JSON.stringify({ tipo: "entrar", salaId: codigo }));
+    };
+    atual.onmessage = evento => {
+      if (socket !== atual) return;
+      try {
+        const dados = JSON.parse(evento.data);
+        if (dados.tipo === "inscrito") campo("conexao").textContent = `WebSocket: conectado à sala ${dados.salaId}.`;
+        if (dados.tipo === "rodada" && dados.estado) {
+          renderizarRodada(dados.estado);
+          if (dados.erro) mensagem(dados.erro, true);
+        }
+        if (dados.tipo === "erro") mensagem(dados.msg, true);
+        if (dados.tipo === "participante_entrou") mensagem(`Participante ${dados.participanteId} entrou na sala.`);
+        if (dados.tipo === "participante_saiu") mensagem(`Participante ${dados.participanteId} saiu da sala.`);
+        if (dados.tipo === "rodada_cancelada") mensagem("A rodada interrompida foi cancelada.");
+      } catch (erro) {
+        mensagem(`Erro ao ler evento do WebSocket: ${erro.message}`, true);
+      }
+    };
+    atual.onerror = () => {
+      if (socket === atual) mensagem("Falha no WebSocket. Use “Acompanhar sala atual” para reconectar.", true);
+    };
+    atual.onclose = () => {
+      if (socket === atual) campo("conexao").textContent = "WebSocket: desconectado.";
+    };
+  }
+
+  function mostrarMao(titulo, detalhes, cartas) {
+    const mao = document.createElement("div");
+    mao.className = "mao";
+    const nome = document.createElement("h3");
+    nome.textContent = titulo;
+    const texto = document.createElement("p");
+    texto.textContent = detalhes;
+    const lista = document.createElement("div");
+    lista.className = "cartas";
+    for (const carta of cartas) {
+      if (!carta.visivel) {
+        const verso = document.createElement("div");
+        verso.className = "carta-oculta";
+        verso.textContent = "Oculta";
+        lista.append(verso);
+      } else {
+        const imagem = document.createElement("img");
+        imagem.alt = `Carta ${carta.codigo || ""}`;
+        try {
+          const url = new URL(carta.imagem);
+          if (!["http:", "https:"].includes(url.protocol)) throw new Error("Endereço inválido");
+          imagem.src = url.href;
+        } catch {
+          mensagem(`Imagem inválida para a carta ${carta.codigo || "desconhecida"}.`, true);
+        }
+        imagem.onerror = () => mensagem(`Não foi possível carregar a imagem da carta ${carta.codigo || "desconhecida"}.`, true);
+        lista.append(imagem);
+      }
+    }
+    mao.append(nome, texto, lista);
+    return mao;
+  }
+
+  function renderizarRodada(estado) {
+    campo("resumo").textContent = `Rodada ${estado.rodId} | Fase: ${estado.fase} | Vez: ${estado.jogadorDaVez ?? "ninguém"}`;
+    const mesa = campo("mesa");
+    mesa.replaceChildren();
+    mesa.append(mostrarMao("Dealer", `Pontos visíveis: ${estado.dealer.pontos}`, estado.dealer.cartas));
+    for (const jogador of estado.jogadores) {
+      const eu = Number(jogador.parId) === Number(participanteId) ? " (você)" : "";
+      const detalhes = `Status: ${jogador.status} | Pontos: ${jogador.pontos} | Saldo: ${jogador.saldo} | Aposta: ${jogador.aposta} | Lucro: ${jogador.lucro}`;
+      mesa.append(mostrarMao(`Participante ${jogador.parId}${eu}`, detalhes, jogador.cartas));
+    }
+  }
+
+  async function atualizarEstado(codigo) {
+    const estado = await requisicao(`/blackjack/estado/${codigo}`);
+    selecionarSala(codigo, estado.participanteId);
+    renderizarRodada(estado);
+    return estado;
+  }
+
+  async function identificar() {
+    const usuario = await requisicao("/usuario/me");
+    campo("usuario").textContent = `Usuário: ${usuario.nome} (${usuario.email})`;
+  }
+
+  campo("cadastrar").onclick = executar(async () => {
+    const nome = campo("nome").value.trim();
+    const email = campo("email").value.trim();
+    const senha = campo("senha").value;
+    if (!nome || !email || !senha) throw new Error("Informe nome, email e senha para o cadastro.");
+    const resultado = await requisicao("/usuario", { nome, email, senha });
+    mensagem(`${resultado.msg} Agora clique em Entrar.`);
+  });
+
+  campo("login").onclick = executar(async () => {
+    const email = campo("email").value.trim();
+    const senha = campo("senha").value;
+    if (!email || !senha) throw new Error("Informe email e senha.");
+    await requisicao("/login", { email, senha });
+    fecharConexao();
+    salaAtual = null;
+    participanteId = null;
+    campo("mesa").replaceChildren();
+    campo("resumo").textContent = "Nenhuma rodada carregada.";
+    campo("salaAtual").textContent = "Nenhuma sala selecionada.";
+    campo("senha").value = "";
+    await identificar();
+    mensagem("Login realizado.");
+  });
+
+  campo("criarSala").onclick = executar(async () => {
+    const salaNome = campo("nomeSala").value.trim();
+    if (!salaNome) throw new Error("Informe o nome da sala.");
+    const resultado = await requisicao("/sala", { salaNome });
+    campo("codigoSala").value = resultado.salaId;
+    mensagem(`Sala criada. Código: ${resultado.salaId}. Clique em Entrar na sala.`);
+  });
+
+  campo("listarSalas").onclick = executar(async () => {
+    const salas = await requisicao("/sala");
+    const lista = campo("salas");
+    lista.replaceChildren();
+    if (!salas.length) lista.textContent = "Você ainda não criou salas.";
+    for (const sala of salas) {
+      const botao = document.createElement("button");
+      botao.type = "button";
+      botao.textContent = `${sala.sal_nome} (código ${sala.sal_id})`;
+      botao.onclick = () => { campo("codigoSala").value = sala.sal_id; };
+      lista.append(botao);
+    }
+    mensagem("Lista de salas atualizada.");
+  });
+
+  campo("entrarSala").onclick = executar(async () => {
+    const codigoSala = codigoInformado();
+    let resultado;
+    try {
+      resultado = await requisicao("/sala/entrar", { codigoSala });
+    } catch (erro) {
+      if (erro.dados?.participanteId) {
+        selecionarSala(codigoSala, erro.dados.participanteId);
+        conectar();
+      }
+      throw erro;
+    }
+    selecionarSala(codigoSala, resultado.participanteId);
+    if (resultado.rodada) renderizarRodada(resultado.rodada);
+    conectar();
+    mensagem("Entrada na sala realizada.");
+  });
+
+  campo("acompanhar").onclick = executar(async () => {
+    const codigo = codigoInformado();
+    await atualizarEstado(codigo);
+    conectar();
+    mensagem("Estado da sala atualizado.");
+  });
+
+  campo("sairSala").onclick = executar(async () => {
+    const codigoSala = salaSelecionada();
+    await requisicao("/sala/sair", { codigoSala });
+    fecharConexao();
+    salaAtual = null;
+    participanteId = null;
+    campo("salaAtual").textContent = "Nenhuma sala selecionada.";
+    campo("resumo").textContent = "Nenhuma rodada carregada.";
+    campo("mesa").replaceChildren();
+    mensagem("Saída da sala realizada.");
+  });
+
+  async function jogar(rota, dados = {}) {
+    const salaId = salaSelecionada();
+    const estado = await requisicao(`/blackjack/${rota}`, { salaId, ...dados });
+    if (estado.participanteId != null) participanteId = estado.participanteId;
+    renderizarRodada(estado);
+    mensagem("Jogada realizada.");
+  }
+
+  campo("iniciar").onclick = executar(() => jogar("rodada"));
+  campo("apostar").onclick = executar(() => jogar("apostar", { valor: Number(campo("valor").value) }));
+  campo("distribuir").onclick = executar(() => jogar("iniciar-distribuicao"));
+  campo("pedir").onclick = executar(() => jogar("pedir-carta"));
+  campo("parar").onclick = executar(() => jogar("parar"));
+  campo("continuar").onclick = executar(() => jogar("continuar"));
+  campo("atualizar").onclick = executar(async () => {
+    await atualizarEstado(salaSelecionada());
+    mensagem("Estado da rodada atualizado.");
+  });
+
+  identificar().catch(erro => {
+    if (erro.status !== 401) mensagem(`Não foi possível verificar o login: ${erro.message}`, true);
+  });
+</script>
+</body>
+</html>

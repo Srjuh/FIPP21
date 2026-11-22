@@ -1,9 +1,7 @@
 import { randomInt } from "node:crypto";
 import CartaEntity from "../entities/cartaEntity.js";
 
-// Baralho local com o mesmo formato de cartas da Deck of Cards API.
-// A rodada só precisa de um objeto com o método "async comprar()" que devolve uma CartaEntity,
-// Integração com a API pode criar uma classe com esse mesmo método
+// Baralho local para testes, com o mesmo formato de cartas da Deck of Cards API.
 
 const VALORES = ["ACE", "2", "3", "4", "5", "6", "7", "8", "9", "10", "JACK", "QUEEN", "KING"];
 const NAIPES = ["SPADES", "HEARTS", "DIAMONDS", "CLUBS"];
@@ -66,6 +64,14 @@ export default class BaralhoLocal {
         }
 
         return this.#cartas.shift();
+    }
+
+    async comprarVarias(quantidade) {
+        let cartas = [];
+        for(let i = 0; i < quantidade; i++){
+            cartas.push(await this.comprar());
+        }
+        return cartas;
     }
 
     static #criarEmbaralhado(quantidadeBaralhos) {

@@ -4,8 +4,8 @@ export default class BlackjackRepository {
 
     #banco;
 
-    constructor() {
-        this.#banco = new Database();
+    constructor(banco = new Database()) {
+        this.#banco = banco;
     }
 
     // Participante ativo do usuário logado em uma sala
@@ -45,6 +45,33 @@ export default class BlackjackRepository {
         return await this.#banco.ExecutaComandoLastInserted(sql, [codigoBaralho, salaId]);
     }
 
+    async obterRodadaEmAndamento(salaId) {
+        let sql = "select rod_id from tb_rodada where sal_id = ? and rod_dtfim is null limit 1";
+        let rows = await this.#banco.ExecutaComando(sql, [salaId]);
+        return rows[0] ?? null;
+    }
+
+    async obterRodadaPorId(rodId) {
+        let rows = await this.#banco.ExecutaComando(
+            "select rod_id, sal_id, rod_dtfim from tb_rodada where rod_id = ?", [rodId]);
+        return rows[0] ?? null;
+    }
+
+    async verificarEstrutura() {
+        let colunas = await this.#banco.ExecutaComando("show columns from tb_turno like 'tur_status'", []);
+        let tipo = colunas[0]?.Type ?? "";
+        return ["Parou", "Empatou", "Blackjack"].every(status => tipo.includes(`'${status}'`));
+    }
+
+    async cancelarRodadaInterrompida(rodId) {
+        let sql = `update tb_rodada set rod_dtfim = current_timestamp
+            where rod_id = ? and rod_dtfim is null
+            and not exists (select 1 from tb_aposta where rod_id = ?)
+            and not exists (select 1 from tb_turno where rod_id = ?)
+            and not exists (select 1 from tb_carta where rod_id = ?)`;
+        return await this.#banco.ExecutaComandoNonQuery(sql, [rodId, rodId, rodId, rodId]);
+    }
+
     // Grava tudo o que aconteceu na rodada de uma vez só (transação):
     // apostas, turnos, cartas, variação de saldo e data de término.
     // Se qualquer comando falhar, nada é gravado.
@@ -53,6 +80,12 @@ export default class BlackjackRepository {
 
         try {
             await cnn.beginTransaction();
+
+            let [rodadas] = await cnn.query(
+                "select rod_dtfim from tb_rodada where rod_id = ? for update", [rodId]);
+            if(rodadas.length === 0 || rodadas[0].rod_dtfim !== null){
+                throw new Error("A rodada não existe ou já foi finalizada.");
+            }
 
             for(let r of resultados.jogadores){
                 await cnn.query(
@@ -70,6 +103,9 @@ export default class BlackjackRepository {
             }
 
             if(cartas.length > 0){
+                await cnn.query(
+                    "insert into tb_turno (tur_somacartas, tur_status, par_id, rod_id) values (?, ?, null, ?)",
+                    [resultados.dealerPontos, resultados.dealerPontos > 21 ? "Estourou" : "Parou", rodId]);
                 let valores = cartas.map(c => [c.codigo, c.imagem, c.ordem, c.visivel, c.valor, c.naipe, c.parId, c.rodId]);
 
                 await cnn.query(

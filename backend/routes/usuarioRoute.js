@@ -6,6 +6,13 @@ const router = express.Router();
 let controller = new UsuarioController();
 let auth = new LoginMiddleware();
 
+router.get("/me", auth.validar, (req, res) => {
+    // #swagger.tags = ['Usuário']
+    // #swagger.description = 'Retorna os dados do usuário autenticado.'
+    // #swagger.security = [{ "cookieAuth": [] }]
+    controller.obterAtual(req, res);
+})
+
 router.get("/", auth.validar, (req, res) => {
     // #swagger.tags = ['Usuário']
     // #swagger.description = 'Lista todos os usuários cadastrados'

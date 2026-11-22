@@ -96,6 +96,8 @@ export default class RodadaBlackjack {
 
             if(jogador.mao.estourou){
                 jogador.status = STATUS.ESTOUROU;
+                jogador.lucro = -jogador.aposta;
+                jogador.saldo = RegrasBlackjack.arredondar(jogador.saldo + jogador.lucro);
             } else if(!RegrasBlackjack.jogadorPodePedirCarta(jogador.mao)){
                 // Chegou em 21: não há mais o que fazer, para automaticamente
                 jogador.status = STATUS.PAROU;
@@ -122,19 +124,41 @@ export default class RodadaBlackjack {
     // - jogando: a mão dele para na hora e o resultado é calculado normalmente no fim
     sairDaRodada(parId) {
         return this.#executar(async () => {
-            let jogador = this.#buscarJogador(parId);
+            let jogador = this.#jogadores.find(j => Number(j.parId) === Number(parId));
+            if(!jogador){
+                if(this.#fase === FASES.APOSTAS && this.#todosApostaram()) await this.#distribuir();
+                return this.obterEstado();
+            }
 
             if(this.#fase === FASES.APOSTAS){
                 this.#jogadores = this.#jogadores.filter(j => j !== jogador);
 
-                if(this.#todosApostaram()){
+                if(this.#jogadores.length === 0){
+                    this.#fase = FASES.FINALIZADA;
+                } else if(this.#todosApostaram()){
                     await this.#distribuir();
                 }
             } else if(this.#fase === FASES.JOGADORES && jogador.status === STATUS.JOGANDO){
                 jogador.status = STATUS.PAROU;
                 await this.#avancar();
             }
+            if(this.#fase === FASES.JOGADORES && !this.#jogadorDaVez()){
+                await this.#avancar();
+            }
 
+            return this.obterEstado();
+        });
+    }
+
+    continuar() {
+        return this.#executar(async () => {
+            if(this.#fase === FASES.APOSTAS){
+                await this.#distribuir();
+            } else if(this.#fase === FASES.JOGADORES && !this.#jogadorDaVez()){
+                await this.#avancar();
+            } else {
+                throw new ErroBlackjack("FASE_INVALIDA", "Não há distribuição pendente para continuar!", 409);
+            }
             return this.obterEstado();
         });
     }
@@ -243,9 +267,7 @@ export default class RodadaBlackjack {
     }
 
     // "alvo" é um jogador ou o dealer (os dois têm "mao" e "proximaOrdem")
-    async #darCarta(alvo, visivel = true) {
-        let carta = await this.#baralho.comprar();
-
+    #atribuirCarta(alvo, carta, visivel = true) {
         carta.rodId = this.#rodId;
         carta.parId = alvo.parId ?? null;
         carta.ordem = alvo.proximaOrdem++;
@@ -255,12 +277,19 @@ export default class RodadaBlackjack {
         return carta;
     }
 
+    async #darCarta(alvo, visivel = true) {
+        return this.#atribuirCarta(alvo, await this.#baralho.comprar(), visivel);
+    }
+
     async #distribuir() {
         let apostadores = this.#jogadores.filter(j => j.status === STATUS.APOSTOU);
 
         if(apostadores.length === 0){
             throw new ErroBlackjack("SEM_APOSTAS", "Ninguém apostou nessa rodada!", 409);
         }
+
+        let cartas = await this.#baralho.comprarVarias(apostadores.length * 2 + 2);
+        let indice = 0;
 
         // Quem não apostou fica de fora
         this.#jogadores
@@ -271,16 +300,16 @@ export default class RodadaBlackjack {
 
         // Ordem padrão: 1ª carta de cada jogador, 1ª do dealer (aberta), 2ª de cada jogador, 2ª do dealer (virada)
         for(let jogador of apostadores){
-            await this.#darCarta(jogador);
+            this.#atribuirCarta(jogador, cartas[indice++]);
         }
 
-        await this.#darCarta(this.#dealer, true);
+        this.#atribuirCarta(this.#dealer, cartas[indice++], true);
 
         for(let jogador of apostadores){
-            await this.#darCarta(jogador);
+            this.#atribuirCarta(jogador, cartas[indice++]);
         }
 
-        await this.#darCarta(this.#dealer, false);
+        this.#atribuirCarta(this.#dealer, cartas[indice++], false);
 
         // Blackjack natural não precisa jogar
         for(let jogador of apostadores){
@@ -311,11 +340,8 @@ export default class RodadaBlackjack {
         // Revela a carta virada
         dealer.mao.cartas.forEach(c => c.visivel = "S");
 
-        // O dealer só compra se existir alguém que parou sem estourar (naturais e estourados já estão decididos)
-        if(this.#jogadores.some(j => j.status === STATUS.PAROU)){
-            while(RegrasBlackjack.dealerDeveComprar(dealer.mao)){
-                await this.#darCarta(dealer);
-            }
+        while(RegrasBlackjack.dealerDeveComprar(dealer.mao)){
+            await this.#darCarta(dealer);
         }
 
         for(let jogador of this.#jogadores){
@@ -325,8 +351,10 @@ export default class RodadaBlackjack {
 
             let resultado = RegrasBlackjack.resolverResultado(jogador.mao, dealer.mao);
 
-            jogador.lucro = RegrasBlackjack.calcularLucro(jogador.aposta, resultado);
-            jogador.saldo = RegrasBlackjack.arredondar(jogador.saldo + jogador.lucro);
+            if(jogador.status !== STATUS.ESTOUROU){
+                jogador.lucro = RegrasBlackjack.calcularLucro(jogador.aposta, resultado);
+                jogador.saldo = RegrasBlackjack.arredondar(jogador.saldo + jogador.lucro);
+            }
 
             // Quem estourou continua com o status "Estourou"
             if(jogador.status !== STATUS.ESTOUROU){

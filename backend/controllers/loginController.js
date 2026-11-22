@@ -11,13 +11,13 @@ export default class LoginController {
 
     async validar(req, res) {
         try{
-            let {email, senha} = req.body;
-            if(email && senha) {
+            let {email, senha} = req.body ?? {};
+            if(typeof email === "string" && email && typeof senha === "string" && senha) {
                 let usuario = await this.#repoUsuario.obterPorEmailSenha(email, senha);
                 if(usuario) {
                     let middleware = new LoginMiddleware();
                     let token = middleware.gerarJWT(usuario.id);
-                    res.cookie("token-pfs2", token, { httpOnly: true });
+                    res.cookie("token-pfs2", token, { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production" });
                     return res.status(200).json({token: token});
                 }
                 else {
