@@ -10,6 +10,7 @@ import usuarioRouter from "./routes/usuarioRoute.js";
 import salaRouter from "./routes/salaRoute.js";
 import participanteRouter from "./routes/participantesRoute.js";
 import rodadaRouter from "./routes/rodadaRoute.js";
+import blackjackRouter from "./routes/blackjackRoute.js";
 
 const require = createRequire(import.meta.url);
 const outputJson = require("./swagger-output.json");
@@ -28,6 +29,7 @@ server.use("/usuario", usuarioRouter);
 server.use("/sala", salaRouter);
 server.use("/participante", participanteRouter);
 server.use("/rodada", rodadaRouter);
+server.use("/blackjack", blackjackRouter);
 
 server.listen(5000, function () {
   console.log("servidor web em funcionamento!");
